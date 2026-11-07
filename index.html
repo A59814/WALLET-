@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>فلوسي</title>
+<meta name="description" content="تطبيق لمتابعة المصاريف اليومية">
+<meta name="theme-color" content="#2DD4A7">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{--bg:#0F1419;--card:#1A222C;--g:#2DD4A7;--txt:#eef2f6;--mut:#8b98a5}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding-bottom:100px}
+  header{text-align:center;padding:18px;font-size:20px;font-weight:800}
+  .wrap{max-width:560px;margin:auto;padding:0 16px}
+  .hero{background:linear-gradient(135deg,#14B88F,#0E7C8A);border-radius:22px;padding:22px}
+  .hero small{opacity:.75}.hero b{display:block;font-size:38px;margin-top:4px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:16px 0 4px}
+  .chip{background:var(--card);border-radius:20px;padding:8px 14px;white-space:nowrap;font-size:14px}
+  h3{margin:18px 0 8px}
+  .item{background:var(--card);border-radius:16px;padding:12px;margin:8px 0;display:flex;align-items:center;gap:12px}
+  .ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:20px}
+  .info{flex:1}.info div{font-weight:600}.info small{color:var(--mut)}
+  .amt{font-weight:800}
+  .del{background:none;border:0;color:#ef5350;font-size:20px;padding:6px}
+  .empty{text-align:center;color:var(--mut);padding:40px 0}
+  .fab{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--g);color:#06251d;border:0;border-radius:28px;padding:15px 28px;font:700 16px inherit;box-shadow:0 6px 20px #0006}
+  dialog{border:0;border-radius:22px;background:var(--card);color:var(--txt);width:min(92vw,420px);padding:20px}
+  dialog::backdrop{background:#000a}
+  input{width:100%;background:#0F1419;border:0;border-radius:12px;padding:14px;color:var(--txt);font-size:16px;margin:6px 0}
+  .cats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .cat{background:#0F1419;border:2px solid transparent;border-radius:18px;padding:8px 12px;color:var(--txt);font-size:14px}
+  .cat.on{border-color:var(--g)}
+  .save{width:100%;background:var(--g);color:#06251d;border:0;border-radius:14px;padding:14px;font-weight:700;font-size:16px;margin-top:8px}
+  #install{display:none;margin:12px auto 0;background:var(--card);color:var(--g);border:1px solid var(--g);border-radius:14px;padding:10px 18px}
+</style>
+</head>
+<body>
+<header>💰 فلوسي</header>
+<div class="wrap">
+  <div class="hero"><small>مصاريف هذا الشهر</small><b id="total">0</b></div>
+  <button id="install">⬇ ثبّت التطبيق</button>
+  <div class="chips" id="chips"></div>
+  <h3>آخر العمليات</h3>
+  <div id="list"></div>
+</div>
+<button class="fab" id="add">＋ مصروف</button>
+
+<dialog id="dlg">
+  <h3 style="margin-top:0;text-align:center">مصروف جديد</h3>
+  <input id="title" placeholder="الوصف">
+  <input id="amount" type="number" inputmode="decimal" placeholder="المبلغ">
+  <div class="cats" id="cats"></div>
+  <input id="date" type="date">
+  <button class="save" id="save">حفظ</button>
+</dialog>
+
+<script>
+const CATS=[["طعام","🍽️","#FF8A65"],["مواصلات","🚌","#4FC3F7"],["تسوق","🛍️","#BA68C8"],["فواتير","🧾","#FFD54F"],["ترفيه","🎬","#F06292"],["صحة","❤️","#81C784"],["أخرى","📦","#90A4AE"]];
+const KEY="falousi.expenses";
+const $=id=>document.getElementById(id);
+const fmt=n=>new Intl.NumberFormat("en").format(Math.round(n*100)/100);
+let data=[];try{data=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){}
+let cat=CATS[0][0];
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+const info=n=>CATS.find(c=>c[0]===n)||CATS[6];
+
+function render(){
+  const now=new Date(),m=data.filter(e=>{const d=new Date(e.date);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()});
+  $("total").textContent=fmt(m.reduce((s,e)=>s+e.amount,0));
+  const by={};m.forEach(e=>by[e.cat]=(by[e.cat]||0)+e.amount);
+  $("chips").innerHTML=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="chip">${info(k)[1]} ${k} ${fmt(v)}</div>`).join("");
+  const sorted=[...data].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  $("list").innerHTML=sorted.length?sorted.map(e=>{const c=info(e.cat);return `<div class="item"><div class="ic" style="background:${c[2]}2e">${c[1]}</div><div class="info"><div>${esc(e.title)}</div><small>${e.cat} • ${e.date}</small></div><span class="amt">${fmt(e.amount)}</span><button class="del" data-id="${e.id}">🗑</button></div>`}).join(""):'<div class="empty">لا توجد مصاريف بعد.<br>اضغط "مصروف" للبدء</div>';
+}
+const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function drawCats(){
+  $("cats").innerHTML=CATS.map(c=>`<button class="cat ${c[0]===cat?"on":""}" data-c="${c[0]}">${c[1]} ${c[0]}</button>`).join("");
+}
+$("cats").onclick=e=>{const b=e.target.closest("[data-c]");if(b){cat=b.dataset.c;drawCats()}};
+$("add").onclick=()=>{$("title").value="";$("amount").value="";$("date").value=new Date().toISOString().slice(0,10);cat=CATS[0][0];drawCats();$("dlg").showModal()};
+$("dlg").onclick=e=>{if(e.target===$("dlg"))$("dlg").close()};
+$("save").onclick=()=>{
+  const t=$("title").value.trim(),a=parseFloat($("amount").value);
+  if(!t||!(a>0)){alert("أدخل وصفاً ومبلغاً صحيحاً");return}
+  data.push({id:Date.now(),title:t,amount:a,cat,date:$("date").value});
+  save();render();$("dlg").close();
+};
+$("list").onclick=e=>{const b=e.target.closest(".del");if(b&&confirm("حذف هذا المصروف؟")){data=data.filter(x=>String(x.id)!==b.dataset.id);save();render()}};
+
+let deferred;
+addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;$("install").style.display="block"});
+$("install").onclick=async()=>{if(deferred){deferred.prompt();await deferred.userChoice;deferred=null;$("install").style.display="none"}};
+
+if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js");
+render();
+</script>
+</body>
+</html>
